@@ -1,0 +1,45 @@
+﻿<div class="bg-white mb-1">
+    <Chart Config="config" @ref="chart"></Chart>
+</div>
+
+@code {
+
+    private LineConfig config { get; set; }
+    private Chart chart { get; set; }
+    [Parameter]
+    public List<Tweet> Tweets { get; set; }
+
+    protected override void OnInitialized()
+    {
+        config = new LineConfig
+        {
+            Options = new LineOptions
+            {
+                Responsive = true,
+                //Scales = new Scales
+                //{
+                //    XAxes = new List<CartesianAxis>
+                //    {
+                //        new LinearCartesianAxis
+                //        {
+                //            Ticks = new LinearCartesianTicks
+                //            {
+                //                StepSize = 1
+                //            }
+                //        }
+                //    }
+                //}
+            }
+        };
+
+        IDataset<int> dataset = new LineDataset<int>(new[] { 6, 3, 10, 4 })
+        {
+            BackgroundColor = ColorUtil.ColorHexString(255, 99, 132), // Slice 1 aka "Red"
+            BorderColor = ColorUtil.ColorHexString(255, 99, 132), // Slice 1 aka "Red"
+            Fill = false
+        };
+
+        config.Data.Datasets.Add(dataset);
+    }
+}
+

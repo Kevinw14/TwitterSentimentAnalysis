@@ -1,0 +1,64 @@
+﻿
+<div class="bg-white">
+    <div class="mx-5 border-b border-gray-500">
+        <div class="my-5">
+            <div class="flex items-start">
+                <img class="rounded-full mr-3" src="@User.Profile_Image_Url" />
+                <div class="flex flex-col">
+                    <div class="flex items-center">
+                        <p class="font-bold">@User.Name</p>
+                        @if (User.Verified)
+                         {
+                            <i class="fa-solid fa-certificate text-[#1DA1F2] ml-1"></i>
+                         }
+                    <div class="flex text-gray-500">
+                        <p class="mx-2">@@@User.Username</p>
+                        <p class="mr-2">∙</p>
+                        <p>@FormattedDate(Tweet.Created_At)</p>
+                    </div>
+                    </div>
+                    <p>@Tweet.Text</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@code {
+    [Parameter]
+    public Tweet Tweet { get; set; }
+    [Parameter]
+    public User User { get; set; }
+
+    private string FormattedDate(DateTime Date)
+    {
+        DateTime LocalTime = Date.AddHours(-5);
+        TimeSpan Difference = DateTime.Now - LocalTime;
+
+        if (Difference.TotalSeconds < 60)
+        {
+            return Difference.Seconds + "s";
+        }
+        else if (Difference.TotalSeconds < 3600)
+        {
+            return Difference.Minutes + "m";
+        }
+        else if (Difference.TotalSeconds < 86400)
+        {
+            return Difference.Hours + "h";
+        }
+        else if (IsWithinTheYear(LocalTime))
+        {
+            return Date.ToString("MMM dd");
+        }
+        else
+        {
+            return Date.ToString("MMM dd, yyyy");
+        }
+    }
+
+    private bool IsWithinTheYear(DateTime Date)
+    {
+        return Date.Year == DateTime.Now.Year;
+    }
+}
+

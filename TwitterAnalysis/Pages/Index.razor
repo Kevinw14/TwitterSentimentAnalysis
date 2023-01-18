@@ -1,0 +1,195 @@
+﻿@page "/"
+@inject IJSRuntime JsRuntime
+
+<div class="h-screen grid grid-cols-12 gap-1">
+    @*Query Builder*@
+    <div class="flex justify-center items-center col-span-3 bg-blue-300">
+        <button @onclick="GetTweets">Get Tweets</button>
+    </div>
+    <div class="h-screen flex flex-col col-span-5 bg-dusty-green">
+        @*Tweets*@
+        <div id="tweet-container" class="h-full overflow-y-scroll flex flex-col">
+            @if (IsLoading == true)
+            {
+                <h1>Loading...</h1>
+            }
+            else
+            {
+                @for (int i = Page.Min; i < Page.Max; i++)
+                {
+                    Tweet Tweet = TweetSearchData.Data[i];
+                    User User = TweetSearchData.Includes.Users.Find(element => element.Id == Tweet.Author_Id);
+                    <TweetCell Tweet="Tweet" User="User"></TweetCell>
+                }
+            }
+        </div>
+        @*Page Controls*@
+        <PageControls NextPageClicked="NextPage" PreviousPageClicked="PreviousPage" @bind-Page="Page" Count="@TweetSearchData.Data.Count"></PageControls>
+    </div>
+    @*Analysis*@
+    <div class="flex flex-col col-span-4 bg-dusty-green">
+        @*<Timeline Tweets="@TweetSearchData.Data"></Timeline>*@
+        <SentimentWidget @bind-Sentiment="sentiment"></SentimentWidget>
+    </div>
+</div>
+
+@code {
+    private Sentiment sentiment;
+    private WebsocketClient WebSocketClient;
+    private TweetSearchData TweetSearchData = new TweetSearchData();
+    private bool IsLoading = false;
+    private Page Page;
+
+    protected override void OnInitialized()
+    {
+        this.Page = new Page();
+    }
+
+    private async void NextPage()
+    {
+        await JsRuntime.InvokeVoidAsync("ScrollToTop");
+    }
+
+    private async void PreviousPage()
+    {
+        await JsRuntime.InvokeVoidAsync("ScrollToTop");
+    }
+
+    private async Task ProcessTweets()
+    {
+        string output = JsonConvert.SerializeObject(TweetSearchData.Data);
+        try
+        {
+            Uri URL = new Uri("ws://127.0.0.1:5000/sentiment");
+            WebSocketClient = new WebsocketClient(URL);
+
+            // Listen for messages returned by the server
+            WebSocketClient.MessageReceived.Subscribe(OnMessage);
+
+            // Start the websocket
+            await WebSocketClient.StartOrFail();
+
+            // Send corpus of tweets to the websocket server
+            WebSocketClient.Send(output);
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error " + ex.ToString());
+        }
+    }
+
+    private void OnMessage(ResponseMessage Message)
+    {
+        // Deserialize Response into SentimentResponse
+        SentimentResponse Response = JsonConvert.DeserializeObject<SentimentResponse>(Message.Text);
+
+        //Get Chart dataset
+        PieDataset<int> Dataset = sentiment.Config.Data.Datasets[0] as PieDataset<int>;
+
+        // Get the index of the type that was return from the labels in the chart
+        int index = sentiment.Config.Data.Labels.IndexOf(Response.Type);
+
+        // Increment the type returned
+        Dataset[index]++;
+
+        // Update the chart
+        sentiment.Chart.Update();
+
+        // Update the percentage that has been processed by the websocket
+        sentiment.Processed = Response.Percent_Processed;
+
+        // Indexes of each sentiment
+        int positive_index = sentiment.Config.Data.Labels.IndexOf("Positive");
+        int neutral_index = sentiment.Config.Data.Labels.IndexOf("Neutral");
+        int negative_index = sentiment.Config.Data.Labels.IndexOf("Negative");
+
+        // Calculate percentages of each label
+        double positive_percentage = Convert.ToDouble(Dataset[positive_index]) / TweetSearchData.Data.Count * 100;
+        double neutral_percentage = Convert.ToDouble(Dataset[neutral_index]) / TweetSearchData.Data.Count * 100;
+        double negative_percentage = Convert.ToDouble(Dataset[negative_index]) / TweetSearchData.Data.Count * 100;
+
+        // Update model
+        sentiment.PositivePercentage = String.Format("{0:0.00}", positive_percentage);
+        sentiment.NeutralPercentage = String.Format("{0:0.00}", neutral_percentage);
+        sentiment.NegativePercentage = String.Format("{0:0.00}", negative_percentage);
+
+        // Update UI
+        InvokeAsync(() => StateHasChanged());
+    }
+
+    private void ResetValues()
+    {
+        // Updates the UI to let the user know that it is loading tweets
+        IsLoading = true;
+
+        // Reset all the values of the SentimentWidget
+        sentiment.Processed = 0;
+        sentiment.PositivePercentage = "0.00";
+        sentiment.NeutralPercentage = "0.00";
+        sentiment.NegativePercentage = "0.00";
+
+        // Set Data back to 0 and update chart
+        foreach (PieDataset<int> Dataset in sentiment.Config.Data.Datasets)
+        {
+            for (int i = 0; i < Dataset.Count; i++)
+            {
+                Dataset[i] = 0;
+            }
+
+            sentiment.Chart.Update();
+        }
+    }
+    private async void GetTweets()
+    {
+        // Reset values of the chart
+        ResetValues();
+
+        // Create client and a request
+        string BearerToken = Environment.GetEnvironmentVariable("BEARER_TOKEN");
+        TwitterClient TwitterClient = new TwitterClient(BearerToken);
+        TweetSearchRequest SearchRequest = new TweetSearchRequest();
+        SearchRequest.MaxResults = 1100;
+        List<TweetSearchQuery> Queries = new List<TweetSearchQuery>();
+        TweetSearchQuery RadfordQuery = new TweetSearchQuery("Roe v. Wade -is:retweet lang:en");
+        Queries.Add(RadfordQuery);
+        List<UserField> UserFields = new List<UserField>();
+        UserFields.Add(UserField.USERNAME);
+        UserFields.Add(UserField.PROFILE_IMAGE_URL);
+        UserFields.Add(UserField.VERIFIED);
+        List<Expansion> Expansions = new List<Expansion>();
+        Expansions.Add(Expansion.AUTHOR_ID);
+        List<TweetField> TweetFields = new List<TweetField>();
+        TweetFields.Add(TweetField.CREATED_AT);
+        TweetFields.Add(TweetField.TEXT);
+        SearchRequest.Expansions = Expansions;
+        SearchRequest.UserFields = UserFields;
+        SearchRequest.TweetFields = TweetFields;
+        SearchRequest.Queries = Queries;
+
+        Console.WriteLine(TwitterClient.TweetSearchURL(SearchRequest));
+        try
+        {
+            // Fetch tweets
+            APIResponse<TweetSearchData> Response = await TwitterClient.SearchTweets(SearchRequest);
+
+            // Set Tweet array to the tweets in the response
+            TweetSearchData = Response.Data;
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+
+        // Show Tweets
+        IsLoading = false;
+
+        // Update UI
+        StateHasChanged();
+
+        // Start processing the sentiment of the tweets
+        await ProcessTweets();
+    }
+}
+

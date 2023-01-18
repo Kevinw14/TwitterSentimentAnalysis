@@ -1,0 +1,78 @@
+﻿<div class="select-none h-12 border-t border-[#F0F0F0] bg-granite flex items-center">
+    <div class="flex items-center mx-7 basis-40 justify-between">
+        <div class="flex items-center justify-between basis-2/3">
+            <button @onclick="PreviousPage"><i class="fa-regular fa-angle-left"></i></button>
+            <p>@Page.Min - @Page.Max</p>
+            <button @onclick="NextPage"><i class="fa-regular fa-angle-right"></i></button>
+        </div>
+        <p class="text-gray-400">of @Count</p>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Page Page { get; set; }
+    private int count;
+    [Parameter]
+    public EventCallback<Page> PageChanged { get; set; }
+    [Parameter]
+    public EventCallback NextPageClicked { get; set; }
+    [Parameter]
+    public EventCallback PreviousPageClicked { get; set; }
+
+#pragma warning disable BL0007
+    [Parameter]
+    public int Count
+    {
+        get
+        {
+            return count;
+        }
+
+        set
+        {
+            count = value;
+            if (count == 0) { return; }
+            Page.Min = Page.PageNumber * 50 + 1;
+            Page.Max = Page.PageNumber * 50 + 50;
+
+            if (Page.Max > Count)
+                Page.Max = count;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        count = 0;
+    }
+
+    private async Task PreviousPage()
+    {
+        if (Page.PageNumber != 0)
+        {
+            Page.PageNumber--;
+            Page.Min = Page.PageNumber * 50 + 1;
+            Page.Max = Page.PageNumber * 50 + 50;
+            await PageChanged.InvokeAsync(Page);
+            await PreviousPageClicked.InvokeAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (Page.Max < count)
+        {
+            Page.PageNumber++;
+            Page.Min = Page.PageNumber * 50 + 1;
+            Page.Max = Page.PageNumber * 50 + 50;
+        }
+
+        if (Page.Max > Count)
+        {
+            Page.Max = Count;
+        }
+
+        await PageChanged.InvokeAsync(Page);
+        await NextPageClicked.InvokeAsync();
+    }
+    }
